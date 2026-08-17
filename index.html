@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>EV — Analysis Engine</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: #050505;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+.app {
+    max-width: 430px;
+    min-height: 100vh;
+    margin: auto;
+    padding: 25px 18px;
+}
+
+.header {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.logo {
+    font-size: 52px;
+    font-weight: bold;
+    letter-spacing: 8px;
+}
+
+.status {
+    margin-top: 5px;
+    font-size: 13px;
+    color: #00ff88;
+}
+
+.core {
+    width: 155px;
+    height: 155px;
+    margin: 45px auto 35px;
+
+    border: 2px solid #00ff88;
+    border-radius: 50%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    box-shadow:
+        0 0 20px #00ff88,
+        inset 0 0 25px rgba(0,255,136,.25);
+
+    animation: pulse 2s infinite;
+}
+
+.core span {
+    font-size: 36px;
+    font-weight: bold;
+}
+
+@keyframes pulse {
+    50% {
+        transform: scale(1.06);
+        box-shadow:
+            0 0 45px #00ff88,
+            inset 0 0 35px rgba(0,255,136,.3);
+    }
+}
+
+.panel {
+    background: #101010;
+    border: 1px solid #242424;
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 15px;
+}
+
+.output {
+    min-height: 100px;
+    line-height: 1.6;
+    color: #ddd;
+}
+
+button {
+    width: 100%;
+    border: 0;
+    border-radius: 13px;
+    padding: 16px;
+    margin-top: 10px;
+
+    font-size: 16px;
+    font-weight: bold;
+
+    background: #00ff88;
+    color: #000;
+}
+
+button:active {
+    transform: scale(.98);
+}
+
+.secondary {
+    background: #1b1b1b;
+    color: white;
+    border: 1px solid #333;
+}
+
+.listening {
+    animation: listen 0.8s infinite alternate;
+}
+
+@keyframes listen {
+    from {
+        box-shadow: 0 0 15px #00ff88;
+    }
+    to {
+        box-shadow: 0 0 50px #00ff88;
+    }
+}
+</style>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="app">
+
+    <div class="header">
+        <div class="logo">EV</div>
+        <div class="status" id="status">
+            ● ONLINE
+        </div>
+    </div>
+
+    <div class="core" id="core">
+        <span>EV</span>
+    </div>
+
+    <div class="panel">
+        <div id="output" class="output">
+            Hello. I'm EV.<br>
+            Ready for analysis.
+        </div>
+    </div>
+
+    <button id="talkButton" onclick="startListening()">
+        🎙️ TALK TO EV
+    </button>
+
+    <button class="secondary" onclick="analyzeDemo()">
+        📊 RUN TEST ANALYSIS
+    </button>
+
+</div>
+
+<script>
+
+/* =========================
+   EV SPEECH OUTPUT
+========================= */
+
+function speak(text) {
+
+    if (!("speechSynthesis" in window)) {
+        return;
+    }
+
+    speechSynthesis.cancel();
+
+    const voice = new SpeechSynthesisUtterance(text);
+
+    voice.lang = "en-US";
+    voice.rate = 0.95;
+    voice.pitch = 1;
+
+    speechSynthesis.speak(voice);
+}
+
+
+/* =========================
+   EV VOICE INPUT
+========================= */
+
+function startListening() {
+
+    const SpeechRecognition =
+        window.SpeechRecognition ||
+        window.webkitSpeechRecognition;
+
+    const output =
+        document.getElementById("output");
+
+    const status =
+        document.getElementById("status");
+
+    const core =
+        document.getElementById("core");
+
+    if (!SpeechRecognition) {
+
+        output.innerHTML =
+            "⚠️ <b>Voice recognition isn't available here.</b><br><br>" +
+            "Try opening EV in Chrome.";
+
+        return;
+    }
+
+    const recognition =
+        new SpeechRecognition();
+
+    recognition.lang = "en-US";
+
+    recognition.continuous = false;
+
+    recognition.interimResults = false;
+
+    recognition.maxAlternatives = 1;
+
+
+    /* WHEN MICROPHONE STARTS */
+
+    recognition.onstart = function() {
+
+        status.innerHTML =
+            "● LISTENING";
+
+        status.style.color =
+            "#00ff88";
+
+        core.classList.add("listening");
+
+        output.innerHTML =
+            "🎙️ <b>EV IS LISTENING</b><br><br>" +
+            "Speak now...";
+    };
+
+
+    /* WHEN EV HEARS YOU */
+
+    recognition.onresult = function(event) {
+
+        const command =
+            event.results[0][0].transcript;
+
+        output.innerHTML =
+            "🎙️ <b>You said:</b><br><br>" +
+            command;
+
+        respond(command);
+    };
+
+
+    /* USER STOPPED SPEAKING */
+
+    recognition.onspeechend = function() {
+
+        recognition.stop();
+    };
+
+
+    /* ERRORS */
+
+    recognition.onerror = function(event) {
+
+        core.classList.remove("listening");
+
+        status.innerHTML =
+            "● ONLINE";
+
+        let message = "";
+
+        switch(event.error) {
+
+            case "not-allowed":
+                message =
+                    "Microphone permission was denied.";
+                break;
+
+            case "no-speech":
+                message =
+                    "I didn't detect speech. Tap again and speak after EV starts listening.";
+                break;
+
+            case "audio-capture":
+                message =
+                    "I can't access the microphone.";
+                break;
+
+            case "network":
+                message =
+                    "Voice recognition needs a network connection.";
+                break;
+
+            case "service-not-allowed":
+                message =
+                    "This browser doesn't allow voice recognition.";
+                break;
+
+            default:
+                message =
+                    "Voice error: " + event.error;
+        }
+
+        output.innerHTML =
+            "⚠️ <b>" +
+            message +
+            "</b>";
+    };
+
+
+    /* RECOGNITION FINISHED */
+
+    recognition.onend = function() {
+
+        core.classList.remove("listening");
+
+        status.innerHTML =
+            "● ONLINE";
+
+        status.style.color =
+            "#00ff88";
+    };
+
+
+    /* START */
+
+    try {
+
+        recognition.start();
+
+    } catch(error) {
+
+        output.innerHTML =
+            "⚠️ EV couldn't start the microphone.<br><br>" +
+            error.message;
+    }
+}
+
+
+/* =========================
+   EV BRAIN
+========================= */
+
+function respond(command) {
+
+    const text =
+        command.toLowerCase();
+
+    let response;
+
+
+    if (
+        text.includes("hello") ||
+        text.includes("hi")
+    ) {
+
+        response =
+            "Hello. EV is online and ready.";
+
+    }
+
+    else if (
+        text.includes("status")
+    ) {
+
+        response =
+            "All systems are online. Voice interface is working.";
+
+    }
+
+    else if (
+        text.includes("analyze")
+    ) {
+
+        response =
+            "Analysis engine is ready. Give me a dataset.";
+
+    }
+
+    else if (
+        text.includes("who are you")
+    ) {
+
+        response =
+            "I'm EV, your experimental analysis engine.";
+
+    }
+
+    else {
+
+        response =
+            "I heard you say: " +
+            command +
+            ". I'm still learning that command.";
+    }
+
+
+    document.getElementById("output").innerHTML +=
+        "<br><br>🧠 <b>EV:</b><br><br>" +
+        response;
+
+    speak(response);
+}
+
+
+/* =========================
+   TEST ANALYSIS
+========================= */
+
+function analyzeDemo() {
+
+    const data =
+        [2,4,3,5,4,6,5,7,6,8];
+
+    const total =
+        data.reduce(
+            (sum,value) => sum + value,
+            0
+        );
+
+    const average =
+        total / data.length;
+
+    const maximum =
+        Math.max(...data);
+
+    const minimum =
+        Math.min(...data);
+
+
+    const response =
+        "Test analysis complete. " +
+        "I analyzed " +
+        data.length +
+        " values. " +
+        "The average is " +
+        average.toFixed(2) +
+        ". " +
+        "The minimum is " +
+        minimum +
+        " and the maximum is " +
+        maximum +
+        ".";
+
+
+    document.getElementById("output").innerHTML =
+        "📊 <b>EV ANALYSIS</b><br><br>" +
+        response;
+
+    speak(response);
+}
+
+</script>
+
+<script src="script.js"></script>
+</body>
+</html>
