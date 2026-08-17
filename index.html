@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>EV — Analysis Engine</title>
 
 <style>
@@ -47,19 +46,25 @@ body {
     width: 155px;
     height: 155px;
     margin: 45px auto 35px;
-
     border: 2px solid #00ff88;
     border-radius: 50%;
-
     display: flex;
     align-items: center;
     justify-content: center;
-
     box-shadow:
         0 0 20px #00ff88,
         inset 0 0 25px rgba(0,255,136,.25);
+    transition: .3s;
+}
 
-    animation: pulse 2s infinite;
+.core.listening {
+    animation: pulse .8s infinite alternate;
+}
+
+.core.thinking {
+    box-shadow:
+        0 0 45px #00ff88,
+        inset 0 0 35px rgba(0,255,136,.3);
 }
 
 .core span {
@@ -68,11 +73,11 @@ body {
 }
 
 @keyframes pulse {
-    50% {
-        transform: scale(1.06);
-        box-shadow:
-            0 0 45px #00ff88,
-            inset 0 0 35px rgba(0,255,136,.3);
+    from {
+        transform: scale(1);
+    }
+    to {
+        transform: scale(1.07);
     }
 }
 
@@ -96,10 +101,8 @@ button {
     border-radius: 13px;
     padding: 16px;
     margin-top: 10px;
-
     font-size: 16px;
     font-weight: bold;
-
     background: #00ff88;
     color: #000;
 }
@@ -114,17 +117,8 @@ button:active {
     border: 1px solid #333;
 }
 
-.listening {
-    animation: listen 0.8s infinite alternate;
-}
-
-@keyframes listen {
-    from {
-        box-shadow: 0 0 15px #00ff88;
-    }
-    to {
-        box-shadow: 0 0 50px #00ff88;
-    }
+button:disabled {
+    opacity: .5;
 }
 </style>
 <link rel="stylesheet" href="style.css">
@@ -136,9 +130,7 @@ button:active {
 
     <div class="header">
         <div class="logo">EV</div>
-        <div class="status" id="status">
-            ● ONLINE
-        </div>
+        <div class="status" id="status">● ONLINE</div>
     </div>
 
     <div class="core" id="core">
@@ -164,8 +156,14 @@ button:active {
 
 <script>
 
+const output = document.getElementById("output");
+const statusText = document.getElementById("status");
+const core = document.getElementById("core");
+const talkButton = document.getElementById("talkButton");
+
+
 /* =========================
-   EV SPEECH OUTPUT
+   SPEAK
 ========================= */
 
 function speak(text) {
@@ -176,18 +174,28 @@ function speak(text) {
 
     speechSynthesis.cancel();
 
-    const voice = new SpeechSynthesisUtterance(text);
+    const utterance =
+        new SpeechSynthesisUtterance(text);
 
-    voice.lang = "en-US";
-    voice.rate = 0.95;
-    voice.pitch = 1;
+    utterance.lang = "en-US";
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
 
-    speechSynthesis.speak(voice);
+    utterance.onstart = function() {
+        statusText.innerHTML = "● SPEAKING";
+    };
+
+    utterance.onend = function() {
+        statusText.innerHTML = "● ONLINE";
+        core.classList.remove("thinking");
+    };
+
+    speechSynthesis.speak(utterance);
 }
 
 
 /* =========================
-   EV VOICE INPUT
+   VOICE INPUT
 ========================= */
 
 function startListening() {
@@ -196,20 +204,10 @@ function startListening() {
         window.SpeechRecognition ||
         window.webkitSpeechRecognition;
 
-    const output =
-        document.getElementById("output");
-
-    const status =
-        document.getElementById("status");
-
-    const core =
-        document.getElementById("core");
-
     if (!SpeechRecognition) {
 
         output.innerHTML =
-            "⚠️ <b>Voice recognition isn't available here.</b><br><br>" +
-            "Try opening EV in Chrome.";
+            "⚠️ Voice recognition isn't supported here.";
 
         return;
     }
@@ -218,33 +216,21 @@ function startListening() {
         new SpeechRecognition();
 
     recognition.lang = "en-US";
-
     recognition.continuous = false;
-
     recognition.interimResults = false;
-
     recognition.maxAlternatives = 1;
 
+    talkButton.disabled = true;
 
-    /* WHEN MICROPHONE STARTS */
+    statusText.innerHTML =
+        "● LISTENING";
 
-    recognition.onstart = function() {
+    core.classList.add("listening");
 
-        status.innerHTML =
-            "● LISTENING";
+    output.innerHTML =
+        "🎙️ <b>EV IS LISTENING</b><br><br>" +
+        "Speak now...";
 
-        status.style.color =
-            "#00ff88";
-
-        core.classList.add("listening");
-
-        output.innerHTML =
-            "🎙️ <b>EV IS LISTENING</b><br><br>" +
-            "Speak now...";
-    };
-
-
-    /* WHEN EV HEARS YOU */
 
     recognition.onresult = function(event) {
 
@@ -252,86 +238,63 @@ function startListening() {
             event.results[0][0].transcript;
 
         output.innerHTML =
-            "🎙️ <b>You said:</b><br><br>" +
+            "🎙️ <b>You:</b><br><br>" +
             command;
 
-        respond(command);
+        /*
+         * Wait until recognition has completely
+         * finished before starting speech output.
+         */
+        setTimeout(function() {
+
+            respond(command);
+
+        }, 500);
     };
 
-
-    /* USER STOPPED SPEAKING */
-
-    recognition.onspeechend = function() {
-
-        recognition.stop();
-    };
-
-
-    /* ERRORS */
 
     recognition.onerror = function(event) {
 
+        talkButton.disabled = false;
         core.classList.remove("listening");
 
-        status.innerHTML =
-            "● ONLINE";
+        statusText.innerHTML = "● ONLINE";
 
-        let message = "";
+        let message;
 
-        switch(event.error) {
+        if (event.error === "no-speech") {
 
-            case "not-allowed":
-                message =
-                    "Microphone permission was denied.";
-                break;
+            message =
+                "I didn't hear anything. Tap again and speak after EV starts listening.";
 
-            case "no-speech":
-                message =
-                    "I didn't detect speech. Tap again and speak after EV starts listening.";
-                break;
+        } else if (event.error === "not-allowed") {
 
-            case "audio-capture":
-                message =
-                    "I can't access the microphone.";
-                break;
+            message =
+                "Microphone permission was denied.";
 
-            case "network":
-                message =
-                    "Voice recognition needs a network connection.";
-                break;
+        } else {
 
-            case "service-not-allowed":
-                message =
-                    "This browser doesn't allow voice recognition.";
-                break;
-
-            default:
-                message =
-                    "Voice error: " + event.error;
+            message =
+                "Voice error: " + event.error;
         }
 
         output.innerHTML =
-            "⚠️ <b>" +
-            message +
-            "</b>";
+            "⚠️ " + message;
     };
 
-
-    /* RECOGNITION FINISHED */
 
     recognition.onend = function() {
 
+        talkButton.disabled = false;
+
         core.classList.remove("listening");
 
-        status.innerHTML =
-            "● ONLINE";
+        statusText.innerHTML =
+            "● THINKING";
 
-        status.style.color =
-            "#00ff88";
+        core.classList.add("thinking");
     };
 
-
-    /* START */
 
     try {
 
@@ -339,9 +302,10 @@ function startListening() {
 
     } catch(error) {
 
+        talkButton.disabled = false;
+
         output.innerHTML =
-            "⚠️ EV couldn't start the microphone.<br><br>" +
-            error.message;
+            "⚠️ Couldn't start voice recognition.";
     }
 }
 
@@ -373,7 +337,7 @@ function respond(command) {
     ) {
 
         response =
-            "All systems are online. Voice interface is working.";
+            "All systems are online. Voice input and speech output are working.";
 
     }
 
@@ -404,11 +368,19 @@ function respond(command) {
     }
 
 
-    document.getElementById("output").innerHTML +=
+    output.innerHTML +=
         "<br><br>🧠 <b>EV:</b><br><br>" +
         response;
 
-    speak(response);
+    /*
+     * Small delay gives Android time to finish
+     * the microphone session.
+     */
+    setTimeout(function() {
+
+        speak(response);
+
+    }, 300);
 }
 
 
@@ -436,7 +408,6 @@ function analyzeDemo() {
     const minimum =
         Math.min(...data);
 
-
     const response =
         "Test analysis complete. " +
         "I analyzed " +
@@ -448,11 +419,9 @@ function analyzeDemo() {
         "The minimum is " +
         minimum +
         " and the maximum is " +
-        maximum +
-        ".";
+        maximum + ".";
 
-
-    document.getElementById("output").innerHTML =
+    output.innerHTML =
         "📊 <b>EV ANALYSIS</b><br><br>" +
         response;
 
